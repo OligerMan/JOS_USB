@@ -12,86 +12,90 @@
 #define PORTSC_OFFSET 0x400
 #define PORTSC_SHIFT 0x10
 
-#define XECP_OFFSET 0x1000
+#define XECP_OFFSET 0//0x1000
 
 #define INTERRUPTER_REGISTER_SET_COUNT 256
 
 #define EVENT_RING_TABLE_SIZE 256
 #define EVENT_RING_SEGMENT_SIZE 128
 
-uint8_t * memory_space_ptr;
+volatile uint8_t * memory_space_ptr;
 
 struct CapabilityRegisters {
-    uint8_t caplength;
-    uint8_t rsvd0;
-    uint16_t hciversion;
-    uint32_t hcsparams[3];
-    uint32_t hccparams1;
-    uint32_t dboff;
-    uint32_t rtsoff;
-    uint32_t hccparams2;
+    volatile uint8_t caplength;
+    volatile uint8_t rsvd0;
+    volatile uint16_t hciversion;
+    volatile uint32_t hcsparams[3];
+    volatile uint32_t hccparams1;
+    volatile uint32_t dboff;
+    volatile uint32_t rtsoff;
+    volatile uint32_t hccparams2;
 } * cap_regs;
 
 struct OperationalRegisters {
-    uint32_t usbcmd;
-    uint32_t usbsts;
-    uint32_t pagesize;
-    uint32_t rsvdz0;
-    uint32_t dnctrl;
-    uint64_t crcr;
-    uint32_t rsvdz1[4];
-    uint64_t dcbaap;
-    uint32_t config;
-    uint32_t rsvdz2[241];
+    volatile uint32_t usbcmd;
+    volatile uint32_t usbsts;
+    volatile uint32_t pagesize;
+    volatile uint32_t rsvdz0;
+    volatile uint32_t dnctrl;
+    volatile uint64_t crcr;
+    volatile uint32_t rsvdz1[4];
+    volatile uint64_t dcbaap;
+    volatile uint32_t config;
+    volatile uint32_t rsvdz2[241];
 } * oper_regs;
 
 struct InterrupterRegisterSet {
-    uint32_t iman;
-    uint32_t imod;
-    uint32_t erstsz;
-    uint32_t rsvd;
-    uint64_t erstba;
-    uint64_t erdp;
+    volatile uint32_t iman;
+    volatile uint32_t imod;
+    volatile uint32_t erstsz;
+    volatile uint32_t rsvd;
+    volatile uint64_t erstba;
+    volatile uint64_t erdp;
 };
 
 struct RuntimeRegisters {
-    uint32_t mfindex;
-    uint32_t rsvdz[7];
-    struct InterrupterRegisterSet int_reg_set[INTERRUPTER_REGISTER_SET_COUNT];
+    volatile uint32_t mfindex;
+    volatile uint32_t rsvdz[7];
+    volatile struct InterrupterRegisterSet int_reg_set[INTERRUPTER_REGISTER_SET_COUNT];
 } * run_regs;
 
 struct EventRingTableEntry {
-    uint64_t ring_segment_base_address;
-    uint8_t ring_segment_size;
-    uint8_t rsvdz[3];
+    volatile uint64_t ring_segment_base_address;
+    volatile uint8_t ring_segment_size;
+    volatile uint8_t rsvdz[3];
 };
 
 struct Doorbell {
-    uint32_t dbreg[256];
+    volatile uint32_t dbreg[256];
 } * doorbells;
 
 struct TRBTemplate {
-    uint64_t parameter;
-    uint32_t status;
-    uint32_t control;
+    volatile uint64_t parameter;
+    volatile uint32_t status;
+    volatile uint32_t control;
 };
 
-uint8_t * dcbaap;
-uint8_t * device_context[32];
+volatile uint8_t * dcbaap;
+volatile uint8_t * device_context[32];
 
-struct InputContext input_context;
+volatile struct InputContext input_context;
 
-uint8_t * transfer_ring_deque;
-struct TransferTRB transfer_ring[16][128];
+volatile uint8_t * transfer_ring_deque;
+volatile struct TransferTRB transfer_ring[16][128];
 
-uint8_t * event_ring_deque;
-struct EventRingTableEntry * event_ring_segment_table;
-uint32_t event_ring_segment_table_size;
-uint8_t * event_ring_segment_base_address;
-uint8_t * command_ring_deque;
+volatile uint8_t * event_ring_deque;
+volatile struct EventRingTableEntry * event_ring_segment_table;
+volatile uint32_t event_ring_segment_table_size;
+volatile uint8_t * event_ring_segment_base_address;
+volatile uint8_t * command_ring_deque;
 
 uint32_t get_portsc(uint32_t num) {
     return ((uint32_t *)(((void *)oper_regs) + PORTSC_OFFSET + PORTSC_SHIFT * (num - 1)))[0];
+}
+
+void set_portsc(uint32_t num, uint32_t val) {
+    ((uint32_t *)(((void *)oper_regs) + PORTSC_OFFSET + PORTSC_SHIFT * (num - 1)))[0] = val;
 }
 
 bool controller_not_ready() {
@@ -99,7 +103,7 @@ bool controller_not_ready() {
 }
 
 void ring_host_doorbell_register(uint8_t host_controller_command) {
-    uint32_t tmp = doorbells->dbreg[0];
+    volatile uint32_t tmp = doorbells->dbreg[0];
     tmp = tmp & 0xFF00;  // setting zeros to DB Stream ID and DB Target
     tmp = tmp + host_controller_command;
 }
@@ -145,28 +149,34 @@ void xhci_memory_init() {
 }
 
 void xhci_settings_init() {
-    uint32_t config = oper_regs->config;
+    volatile uint32_t config = oper_regs->config;
     config = config | 0x8;               // setting number of device slots equal 8
     oper_regs->config = config;
 
-    uint32_t usbcmd = oper_regs->usbcmd;
+    volatile uint32_t usbcmd = oper_regs->usbcmd;
     usbcmd = usbcmd | 0x1;
     oper_regs->usbcmd = usbcmd;         // setting Run/Stop register to Run state 
+
+    volatile uint16_t xecp_offset = (cap_regs->hccparams1 >> 16);
+    //cprintf("hccparams1 - %08x\n", cap_regs->hccparams1);
+    volatile uint32_t * xecp_pointer = (uint32_t *)((uint8_t *)cap_regs + (xecp_offset << 2)); 
+    volatile uint32_t xecp = xecp_pointer[0];
+    xecp = xecp | (1 << 24);
 }
 
 void xhci_slots_init() {
     //uint8_t max_slots = cap_regs->hcsparams[0] & 0xFF;
 
-    uint8_t * input_context_ptr = (void *)&input_context;
+    volatile uint8_t * input_context_ptr = (void *)&input_context;
     for (int i = 0; i < sizeof(struct InputContext); i++) {
         input_context_ptr[i] = 0;
     }
 
     input_context.input_control_context.add_context = 0x3;
-    input_context.slot_context.root_hub_port_number = 0x1;
+    input_context.slot_context.root_hub_port_number = 0x5;
     input_context.slot_context.slot_state = 0x1 << 4;
     input_context.slot_context.usb_device_address = 0;
-    uint32_t first_row = (1 << 27) + (1 << 20);
+    volatile uint32_t first_row = (1 << 27) + (1 << 20);
     input_context.slot_context.first_row = first_row;
 
     //struct DeviceContext * dev_cont_ptr = (void *)device_context[1];
@@ -177,18 +187,36 @@ void xhci_slots_init() {
     }
     input_context.endpoint_context[0].transfer_ring_deque_ptr = (uint64_t)((void *)&(transfer_ring[0][0]) - 0x8040000000 + 1);
     //dev_cont_ptr->endpoint_context[0].transfer_ring_deque_ptr = (uint64_t)((void *)&(transfer_ring[0][0]) - 0x8040000000 + 1);
-    uint8_t flags = 0x26;   // 
+    volatile uint8_t flags = 0x26;   // 
     input_context.endpoint_context[0].flags_off_08 = flags;
     input_context.endpoint_context[0].max_burst_size = 0;
     input_context.endpoint_context[0].interval = 0;
     input_context.endpoint_context[0].mult_and_max_p_streams = 0;
     input_context.endpoint_context[0].max_packet_size = 0x8;
 
-    struct AddressDeviceCommandTRB * command_ring_adr = (void *)command_ring_deque;
-    command_ring_adr[0] = address_device_command((uint64_t)0, 1, 1);
+    /*volatile struct DisableSlotTRB * dis_command_ring_adr = (void *)command_ring_deque;
+    dis_command_ring_adr[0] = disable_slot_command(1, 0);
+    volatile uint32_t tmp = 0;
+    doorbells->dbreg[0] = tmp; // ring to the host controller doorbell*/
 
+    /*volatile struct EnableSlotTRB * en_command_ring_adr = (void *)command_ring_deque;
+    en_command_ring_adr[0] = enable_slot_command(1, 0);
+    volatile uint32_t tmp = 0;
+    doorbells->dbreg[0] = tmp; // ring to the host controller doorbell*/
+
+    struct AddressDeviceCommandTRB * adr_command_ring_adr = (void *)command_ring_deque;
+    adr_command_ring_adr[0] = address_device_command((uint64_t)input_context_ptr - 0x8040000000, 1, 1);
     uint32_t tmp = 0;
-    doorbells->dbreg[0] = tmp; // ring to the host controller doorbell
+    doorbells->dbreg[0] = tmp; // ring to the host controller doorbell */
+
+    /*struct NoOpTRB * noop_command_ring_adr = (void *)command_ring_deque;
+    for (int i = 0; i < 16; i++) {
+        noop_command_ring_adr[i] = noop_command(0);
+    }
+    uint32_t tmp = 0;
+    doorbells->dbreg[0] = tmp; // ring to the host controller doorbell */
+    for (volatile int i = 0; i < 1000000000; i++) {}
+
     wait_for_command_ring_running();
 }
 
@@ -222,7 +250,7 @@ void print_usb_memory_region() {
     cprintf("\n");
 
     for (int i = 0; i < 8; i++) {
-        uint32_t portsc = get_portsc(i+1);
+        volatile uint32_t portsc = get_portsc(i+1);
         if ((portsc & (1 << 0)) >> 0) {
             cprintf("PORTSC %d  - %08x\n", i+1, portsc);
 
@@ -243,13 +271,16 @@ void print_usb_memory_region() {
         cprintf("Doorbell register %d: %08x\n", i, doorbells->dbreg[i]);
     }
 
-    uint16_t xecp_offset = (cap_regs->hccparams1 >> 16) + (XECP_OFFSET << 2);
-    uint8_t * xecp_pointer = ((uint8_t *)cap_regs + xecp_offset);
+    volatile uint16_t xecp_offset = (cap_regs->hccparams1 >> 16);
+    //cprintf("hccparams1 - %08x\n", cap_regs->hccparams1);
+    cprintf("xecp offset - %08x\n", xecp_offset);
+    volatile uint8_t * xecp_pointer = ((uint8_t *)cap_regs + (xecp_offset << 2));
 
     cprintf("\nExtended capability:\n");
     cprintf("    ID: %02x\n", xecp_pointer[0]);
     cprintf("    next cap ptr: %02x\n", xecp_pointer[1]);
     cprintf("    BIOS semaphore + rsvd: %02x\n", xecp_pointer[2]);
+    cprintf("    OS semaphore + rsvd: %02x\n", xecp_pointer[3]);
 
     cprintf("\n");
 
@@ -285,17 +316,19 @@ void print_usb_memory_region() {
         //}
     }
     //struct CommandCompletionTRB cc_trb = ((struct CommandCompletionTRB *)event_ring_segment_base_address)[1];
-    cprintf("Event ring deque ptr: %016lx", (uint64_t)event_ring_deque);
+    cprintf("Event ring deque ptr: %016lx\n", (uint64_t)event_ring_deque);
     cprintf("\nCommand Completion:\n");
-    for (int i = 0; i < 1; i++) {
-        cprintf("TRB #%d\n", i);
+    for (int i = 0; i < 128; i++) {
         struct CommandCompletionTRB cc_trb = ((struct CommandCompletionTRB *)event_ring_segment_base_address)[i];
-        cprintf("Address: %016lx\n", (uint64_t)((struct CommandCompletionTRB *)event_ring_segment_base_address + i));
-        cprintf("CommandTRB ptr: %016lx\n", cc_trb.command_trb_ptr);
-        cprintf("Compl code part: %08x\n", cc_trb.completion_code);
-        cprintf("TRB type: %08x\n", cc_trb.trb_type / 2);
-        cprintf("VF ID: %08x\n", cc_trb.vf_id);
-        cprintf("Slot ID: %08x\n", cc_trb.slot_id);
+        if (cc_trb.command_trb_ptr != 0) {
+            cprintf("TRB #%d\n", i);
+            cprintf("Address: %016lx\n", (uint64_t)((struct CommandCompletionTRB *)event_ring_segment_base_address + i));
+            cprintf("CommandTRB ptr: %016lx\n", cc_trb.command_trb_ptr);
+            cprintf("Compl code part: %08x\n", cc_trb.completion_code);
+            cprintf("TRB type: %08x\n", cc_trb.trb_type / 4);
+            cprintf("VF ID: %08x\n", cc_trb.vf_id);
+            cprintf("Slot ID: %08x\n", cc_trb.slot_id);
+        }
     }
     cprintf("\n");
 
@@ -328,7 +361,7 @@ void print_usb_memory_region() {
     }
 
     cprintf("Input slot context:\n");
-    struct InputContext * inp_cont_ptr = &(input_context);
+    volatile struct InputContext * inp_cont_ptr = &(input_context);
     cprintf("  Slot context:\n");
     cprintf("    Route string: %x\n", inp_cont_ptr->slot_context.first_row & 0xFFFFF);
     cprintf("    Speed: %x\n", (inp_cont_ptr->slot_context.first_row & (0xF << 20)) >> 20);

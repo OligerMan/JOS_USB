@@ -1,8 +1,8 @@
 #include <usb/pci_name.c>
 
-#define PCI_DEVICE_COUNT 256
-#define PCI_MAX_BUS_COUNT 256
-#define PCI_MAX_SLOT_COUNT 256
+#define PCI_DEVICE_COUNT 8
+#define PCI_MAX_BUS_COUNT 4
+#define PCI_MAX_SLOT_COUNT 32
 
 struct PCIDevice device_list[PCI_DEVICE_COUNT];
 uint32_t pci_device_count;
